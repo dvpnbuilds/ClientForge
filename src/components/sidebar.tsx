@@ -17,6 +17,9 @@ import {
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { seedDrafts, seedLeads } from "@/lib/clientforge/seed";
+import { getAllDynamicDrafts } from "@/lib/clientforge/drafts-store";
+import { getAllDynamicLeads } from "@/lib/clientforge/leads-store";
 import {
   isDemoActive,
   getDemoStep,
@@ -29,8 +32,8 @@ const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/knowledge", label: "Knowledge Base", icon: BookOpen },
   { href: "/chat", label: "AI Chat", icon: MessageSquare },
-  { href: "/leads", label: "Leads", icon: Users, badge: "6" },
-  { href: "/drafts", label: "Drafts", icon: FileText, badge: "2" },
+  { href: "/leads", label: "Leads", icon: Users },
+  { href: "/drafts", label: "Drafts", icon: FileText },
   { href: "/logs", label: "Action Logs", icon: ScrollText },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
@@ -45,6 +48,12 @@ export function Sidebar() {
 
   const demoActive = isDemoActive();
   const demoStep = getDemoStep();
+  const leadCount = seedLeads.length + getAllDynamicLeads().length;
+  const draftCount = seedDrafts.length + getAllDynamicDrafts().length;
+  const counts: Record<string, number> = {
+    "/leads": leadCount,
+    "/drafts": draftCount,
+  };
 
   return (
     <aside className="flex flex-col w-64 min-h-screen bg-sidebar border-r border-sidebar-border">
@@ -93,12 +102,12 @@ export function Sidebar() {
                 {item.label}
               </div>
               <div className="flex items-center gap-1">
-                {item.badge && (
+                {counts[item.href] !== undefined && (
                   <Badge
                     variant="secondary"
                     className="h-4 px-1.5 text-[10px] bg-sidebar-primary/20 text-sidebar-primary border-0"
                   >
-                    {item.badge}
+                    {counts[item.href]}
                   </Badge>
                 )}
                 {active && (
