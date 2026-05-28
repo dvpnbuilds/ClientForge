@@ -1,18 +1,7 @@
 import { useEffect, useSyncExternalStore } from 'react';
+import { VALID_ACTION_TYPES } from './types';
 import type { ActionLog, ActionType, AuditActor, AuditStatus, LogEntityType } from './types';
 
-const VALID_ACTION_TYPES: ActionType[] = [
-  'lead_created',
-  'lead_scored',
-  'draft_generated',
-  'draft_approved',
-  'draft_edited',
-  'draft_sent',
-  'doc_uploaded',
-  'doc_indexed',
-  'rag_retrieval',
-  'chat_response',
-];
 const VALID_ACTORS: AuditActor[] = ['system', 'user', 'ai'];
 const VALID_STATUSES: AuditStatus[] = ['success', 'warning', 'blocked', 'pending'];
 

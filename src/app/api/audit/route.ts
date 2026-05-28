@@ -1,18 +1,6 @@
 import { dbGetAllLogs, dbInsertLog, dbClearAllLogs } from '@/lib/clientforge/audit-db';
-import type { ActionLog, ActionType } from '@/lib/clientforge/types';
-
-const VALID_ACTION_TYPES: ActionType[] = [
-  'lead_created',
-  'lead_scored',
-  'draft_generated',
-  'draft_approved',
-  'draft_edited',
-  'draft_sent',
-  'doc_uploaded',
-  'doc_indexed',
-  'rag_retrieval',
-  'chat_response',
-];
+import { VALID_ACTION_TYPES, VALID_LOG_ENTITY_TYPES } from '@/lib/clientforge/types';
+import type { ActionLog, ActionType, LogEntityType } from '@/lib/clientforge/types';
 
 export async function GET() {
   try {
@@ -58,7 +46,7 @@ function isActionLog(value: unknown): value is ActionLog {
     VALID_ACTION_TYPES.includes(v.type as ActionType) &&
     typeof v.label === 'string' &&
     typeof v.detail === 'string' &&
-    typeof v.entityType === 'string' &&
+    VALID_LOG_ENTITY_TYPES.includes(v.entityType as LogEntityType) &&
     typeof v.entityId === 'string' &&
     typeof v.entityLabel === 'string' &&
     typeof v.timestamp === 'string'

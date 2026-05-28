@@ -17,6 +17,21 @@ export type ActionType =
   | 'rag_retrieval'
   | 'chat_response';
 
+export const VALID_ACTION_TYPES: ActionType[] = [
+  'lead_created',
+  'lead_scored',
+  'draft_generated',
+  'draft_approved',
+  'draft_edited',
+  'draft_sent',
+  'doc_uploaded',
+  'doc_indexed',
+  'rag_retrieval',
+  'chat_response',
+];
+
+export const VALID_LOG_ENTITY_TYPES: LogEntityType[] = ['lead', 'draft', 'document', 'chat'];
+
 export type BudgetRange = 'under-10k' | '10k-25k' | '25k-50k' | '50k-100k' | '100k-plus' | 'unsure';
 export type Timeline = 'asap' | '1-3months' | '3-6months' | '6months-plus' | 'exploring';
 export type LeadSource = 'referral' | 'google' | 'website' | 'social' | 'other';

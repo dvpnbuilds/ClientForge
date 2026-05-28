@@ -1,4 +1,4 @@
-// src/lib/clientforge/audit-db.ts
+import 'server-only';
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
