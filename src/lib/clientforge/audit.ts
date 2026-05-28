@@ -1,14 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import type { ActionLog, ActionType, AuditActor, AuditStatus, LogEntityType } from './types';
 
-const STORAGE_KEY = 'clientforge.audit.logs';
-const STORAGE_VERSION = 1;
-
-interface PersistedAuditPayload {
-  version: number;
-  logs: ActionLog[];
-}
-
 const VALID_ACTION_TYPES: ActionType[] = [
   'lead_created',
   'lead_scored',
@@ -25,8 +17,7 @@ const VALID_ACTORS: AuditActor[] = ['system', 'user', 'ai'];
 const VALID_STATUSES: AuditStatus[] = ['success', 'warning', 'blocked', 'pending'];
 
 let _logs: ActionLog[] = [];
-let _hydrated = false;
-let _counter = 0;
+let _fetchInitiated = false;
 const listeners = new Set<() => void>();
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -100,50 +91,6 @@ function sanitizeLog(value: unknown): ActionLog | null {
   return entry;
 }
 
-function getNextCounter(logs: ActionLog[]): number {
-  return logs.reduce((max, log) => {
-    const match = /^log-dyn-(\d+)$/.exec(log.id);
-    if (!match) return max;
-    return Math.max(max, Number(match[1]));
-  }, 0);
-}
-
-function readPersistedLogs(): ActionLog[] {
-  if (typeof window === 'undefined') return [];
-
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-
-    const parsed: unknown = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      return parsed.map(sanitizeLog).filter((entry): entry is ActionLog => entry !== null);
-    }
-
-    if (!isObject(parsed)) return [];
-    if ((parsed.version ?? STORAGE_VERSION) !== STORAGE_VERSION) return [];
-    if (!Array.isArray(parsed.logs)) return [];
-
-    return parsed.logs.map(sanitizeLog).filter((entry): entry is ActionLog => entry !== null);
-  } catch {
-    return [];
-  }
-}
-
-function persistLogs(logs: ActionLog[]): void {
-  if (typeof window === 'undefined') return;
-
-  try {
-    const payload: PersistedAuditPayload = {
-      version: STORAGE_VERSION,
-      logs,
-    };
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-  } catch {
-    // Best-effort persistence only. Ignore storage failures so logging still works in memory.
-  }
-}
-
 function emitChange(): void {
   for (const listener of listeners) {
     listener();
@@ -155,20 +102,33 @@ function subscribe(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
-export function hydrateDynamicLogs(): ActionLog[] {
-  if (_hydrated) return _logs;
-  if (typeof window === 'undefined') return _logs;
+async function loadFromDb(): Promise<void> {
+  if (_fetchInitiated) return;
+  _fetchInitiated = true;
+  try {
+    const res = await fetch('/api/audit');
+    if (!res.ok) return;
+    const data: unknown = await res.json();
+    if (!Array.isArray(data)) return;
+    const fetched = data.map(sanitizeLog).filter((l): l is ActionLog => l !== null);
+    // Keep any in-memory logs not yet flushed to DB (written before this fetch returned)
+    const fetchedIds = new Set(fetched.map((l) => l.id));
+    const localOnly = _logs.filter((l) => !fetchedIds.has(l.id));
+    _logs = [...fetched, ...localOnly];
+    emitChange();
+  } catch {
+    // Keep in-memory state on network failure
+  }
+}
 
-  _logs = readPersistedLogs();
-  _counter = getNextCounter(_logs);
-  _hydrated = true;
-  emitChange();
+// Kept for backwards compatibility — no-op, loading is now async via useAuditLogs
+export function hydrateDynamicLogs(): ActionLog[] {
   return _logs;
 }
 
 export function useAuditLogs(): ActionLog[] {
   useEffect(() => {
-    hydrateDynamicLogs();
+    loadFromDb();
   }, []);
 
   return useSyncExternalStore(subscribe, () => _logs, () => []);
@@ -191,10 +151,8 @@ export interface LogActionInput {
 }
 
 export function logAction(opts: LogActionInput): ActionLog {
-  hydrateDynamicLogs();
-
   const entry: ActionLog = {
-    id: `log-dyn-${++_counter}`,
+    id: crypto.randomUUID(),
     timestamp: new Date().toISOString(),
     actor: 'system',
     status: 'success',
@@ -202,8 +160,17 @@ export function logAction(opts: LogActionInput): ActionLog {
   };
 
   _logs = [..._logs, entry];
-  persistLogs(_logs);
   emitChange();
+
+  // Fire-and-forget — in-memory update is already applied above
+  fetch('/api/audit', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(entry),
+  }).catch(() => {
+    // Best-effort persist. Log is already in memory for this session.
+  });
+
   return entry;
 }
 
@@ -225,8 +192,10 @@ export function getRecentDynamicLogs(n: number): ActionLog[] {
 
 export function clearDynamicLogs(): void {
   _logs = [];
-  _counter = 0;
-  _hydrated = true;
-  persistLogs(_logs);
+  _fetchInitiated = false;
   emitChange();
+
+  fetch('/api/audit', { method: 'DELETE' }).catch(() => {
+    // Best-effort clear
+  });
 }
