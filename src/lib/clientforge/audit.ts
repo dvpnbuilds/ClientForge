@@ -114,7 +114,9 @@ async function loadFromDb(): Promise<void> {
     // Keep any in-memory logs not yet flushed to DB (written before this fetch returned)
     const fetchedIds = new Set(fetched.map((l) => l.id));
     const localOnly = _logs.filter((l) => !fetchedIds.has(l.id));
-    _logs = [...fetched, ...localOnly];
+    _logs = [...fetched, ...localOnly].sort((a, b) =>
+      a.timestamp.localeCompare(b.timestamp)
+    );
     emitChange();
   } catch {
     // Keep in-memory state on network failure
@@ -128,7 +130,7 @@ export function hydrateDynamicLogs(): ActionLog[] {
 
 export function useAuditLogs(): ActionLog[] {
   useEffect(() => {
-    loadFromDb();
+    void loadFromDb();
   }, []);
 
   return useSyncExternalStore(subscribe, () => _logs, () => []);
@@ -192,10 +194,14 @@ export function getRecentDynamicLogs(n: number): ActionLog[] {
 
 export function clearDynamicLogs(): void {
   _logs = [];
-  _fetchInitiated = false;
+  _fetchInitiated = true; // block re-fetch until DELETE confirms
   emitChange();
 
-  fetch('/api/audit', { method: 'DELETE' }).catch(() => {
-    // Best-effort clear
-  });
+  fetch('/api/audit', { method: 'DELETE' })
+    .then((res) => {
+      if (res.ok) _fetchInitiated = false; // allow fresh load next mount
+    })
+    .catch(() => {
+      _fetchInitiated = false;
+    });
 }
